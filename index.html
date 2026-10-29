@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whereabouts World</title>
+<meta name="description" content="A daily map game: find the mystery country, capital, city, town, village or region anywhere in the world in six goes, with distance, direction and a new clue after every miss.">
+<meta property="og:title" content="Whereabouts World">
+<meta property="og:description" content="Find the mystery place anywhere in the world in six guesses: countries, capitals, cities, towns, villages and regions.">
+<meta property="og:image" content="https://maps.tristanhotham.com/whereabouts-world/header.png">
+<meta property="og:url" content="https://maps.tristanhotham.com/whereabouts-world/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23141313'/%3E%3Ccircle cx='16' cy='13' r='7' fill='%23E0473C'/%3E%3Cpath d='M16 30l-6-12h12z' fill='%23E0473C'/%3E%3Ccircle cx='16' cy='13' r='3' fill='%23141313'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800;9..144,900&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+:root{
+  --bg:#F4EFE6;--card:#FBF9F4;--fg:#141313;--muted:#5E5A54;--rule:#D9D2C4;--line:#141313;--land:#DCD3C3;
+  --red:#B3261E;--blue:#24477F;--good:#1F7A4D;--chip:#ECE6DA;
+  --p0:#B3261E;--p1:#D9731C;--p2:#D8B01C;--p3:#1F7A4D;
+  --display:"Fraunces",Georgia,"Times New Roman",serif;--body:"Source Serif 4",Georgia,"Times New Roman",serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1B1A19;--card:#242322;--fg:#F1EEE8;--muted:#B3ADA4;--rule:#3A3836;--line:#F1EEE8;--land:#3A3734;--red:#E0473C;--blue:#5B8BD6;--good:#4FBF83;--chip:#2E2C2A;
+  --p0:#E8655B;--p1:#E8923F;--p2:#E3C548;--p3:#4FBF83}}
+:root[data-theme="dark"]{--bg:#1B1A19;--card:#242322;--fg:#F1EEE8;--muted:#B3ADA4;--rule:#3A3836;--line:#F1EEE8;--land:#3A3734;--red:#E0473C;--blue:#5B8BD6;--good:#4FBF83;--chip:#2E2C2A;--p0:#E8655B;--p1:#E8923F;--p2:#E3C548;--p3:#4FBF83}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:400 17px/1.5 var(--body)}
+a{color:inherit}
+.wrap{max-width:1040px;margin:0 auto;padding:28px 16px 40px}
+.kick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:600 11.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.kick b{background:var(--fg);color:var(--bg);padding:5px 8px;font-weight:600}
+h1{font:900 clamp(48px,10vw,92px)/.9 var(--display);letter-spacing:-.02em;margin:14px 0 10px}
+h1 .u{color:var(--red)}h1 .k{color:var(--blue)}
+.wtag{font-size:.36em;vertical-align:.6em;background:var(--fg);color:var(--bg);padding:.08em .22em;letter-spacing:.02em}
+.lede{font-size:clamp(17px,2.2vw,20px);max-width:620px;margin:0 0 16px}
+.tabs{display:flex;border:2px solid var(--line);width:max-content;max-width:100%;margin:4px 0 18px}
+.tabs button{font:600 13px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;background:transparent;color:var(--fg);border:0;padding:12px 16px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.tabs button:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.modes{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-start}
+.modes .tabs{margin-bottom:10px}
+.tabs.type button{padding:12px 13px}
+.tnote{font:500 12px/1.4 var(--mono);color:var(--muted);margin:0 0 14px;min-height:1.4em}
+#cg path{stroke:var(--card);stroke-width:1;fill-opacity:.55}
+.game{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:22px;border-top:3px solid var(--line);padding-top:16px}
+.bar{display:flex;justify-content:space-between;gap:10px;font:500 13px/1.3 var(--mono);margin-bottom:10px}
+.clues{list-style:none;margin:0 0 16px;padding:0;counter-reset:c}
+.clues li{position:relative;padding:10px 12px 10px 44px;border:2px solid var(--line);background:var(--card);margin-bottom:8px;font-size:16px;line-height:1.4}
+.clues li::before{counter-increment:c;content:counter(c);position:absolute;left:10px;top:9px;width:24px;height:24px;display:grid;place-items:center;font:600 13px/1 var(--mono);background:var(--fg);color:var(--bg)}
+.clues li.lock{border-style:dashed;border-color:var(--rule);background:transparent;color:var(--muted);font:500 13px/1.4 var(--mono)}
+.clues li.lock::before{background:var(--rule);color:var(--muted)}
+.clues li.new{animation:pop .5s ease}
+@keyframes pop{0%{transform:scale(.97);background:var(--chip)}100%{transform:none}}
+.ask{position:relative;margin:4px 0 12px}
+.ask label{display:block;font:600 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.row{display:flex;gap:8px}
+#q{flex:1;min-width:0;font:600 19px/1.2 var(--body);padding:13px 14px;border:3px solid var(--line);background:var(--card);color:var(--fg);border-radius:0}
+#q:focus{outline:3px solid var(--red);outline-offset:1px}
+.go{font:600 14px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;background:var(--fg);color:var(--bg);border:3px solid var(--fg);padding:0 18px;cursor:pointer}
+.go:hover,.go:focus-visible{background:var(--red);border-color:var(--red);color:#FAF8F4;outline:none}
+.go.ghost{background:transparent;color:var(--fg)}
+.go.ghost:hover,.go.ghost:focus-visible{background:var(--fg);color:var(--bg)}
+.go.big{padding:14px 20px}
+.sug{position:absolute;left:0;right:0;top:100%;z-index:5;list-style:none;margin:4px 0 0;padding:0;background:var(--card);border:3px solid var(--line);max-height:300px;overflow:auto;box-shadow:6px 6px 0 var(--blue)}
+.sug li{padding:10px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--rule)}
+.sug li small{font:500 11.5px/1.3 var(--mono);color:var(--muted);text-align:right}
+.sug li[aria-selected="true"],.sug li:hover{background:var(--chip)}
+.msg{min-height:1.4em;font:500 13px/1.4 var(--mono);color:var(--red);margin:0 0 6px}
+.guesses{list-style:none;margin:0;padding:0}
+.guesses li{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--rule)}
+.guesses .n{font:600 12px/1 var(--mono);color:var(--muted)}
+.guesses .nm{font:700 18px/1.2 var(--display);overflow-wrap:anywhere}
+.guesses .nm small{display:block;font:500 11.5px/1.3 var(--mono);color:var(--muted);font-weight:500;margin-top:2px}
+.guesses .d{font:600 14px/1 var(--mono);white-space:nowrap}
+.guesses .ar{font-size:20px;line-height:1}
+.guesses .pc{font:600 13px/1 var(--mono);padding:6px 7px;color:#fff;min-width:46px;text-align:center}
+.guesses .quip{grid-column:2/-1;font-size:14.5px;color:var(--muted);font-style:italic;margin-top:-4px}
+.mapbox{position:sticky;top:12px;align-self:start}
+#map{width:100%;height:auto;display:block;background:var(--card);border:3px solid var(--line);box-shadow:8px 8px 0 var(--red)}
+#base{fill:var(--land);stroke:var(--card);stroke-width:var(--sw,.6);stroke-linejoin:round}
+#map{transition:none}
+#cg path,#ans{stroke:var(--card);stroke-width:var(--sw,.6)}
+#ans{fill:var(--red)}
+.dot text{font:600 calc(var(--dr,17px)*1.25) var(--mono);fill:#fff;text-anchor:middle;dominant-baseline:central}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font:500 11.5px/1.3 var(--mono);color:var(--muted);margin-top:14px}
+.legend i{display:inline-block;width:12px;height:12px;margin-right:4px;vertical-align:-2px}
+.end{border:3px solid var(--line);background:var(--card);padding:20px;box-shadow:8px 8px 0 var(--blue);margin:6px 0 16px}
+.end .small{font:500 13px/1.4 var(--mono);color:var(--muted)}
+.end h2{font:900 clamp(30px,5vw,42px)/1.02 var(--display);margin:4px 0 6px}
+.end .where{font:600 13px/1.4 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.end .mean{border-left:4px solid var(--red);padding:4px 0 4px 12px;margin:12px 0;font-size:16.5px}
+.end .grid{font-size:22px;line-height:1.3;margin:10px 0;white-space:pre}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 4px}
+.stats{display:flex;gap:18px;margin:14px 0 6px;font:500 12px/1.2 var(--mono);color:var(--muted)}
+.stats b{display:block;font:800 26px/1 var(--display);color:var(--fg)}
+.dist{margin:8px 0 0;font:500 12px/1 var(--mono)}
+.dist div{display:flex;align-items:center;gap:6px;margin:4px 0}
+.dist span{display:inline-block;background:var(--muted);color:var(--bg);padding:4px 6px;min-width:22px;text-align:right}
+.dist .me span{background:var(--good)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--fg);color:var(--bg);font:600 13px/1 var(--mono);padding:12px 16px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+section.about{margin-top:44px;border-top:3px solid var(--line);padding-top:16px;max-width:760px}
+section.about h2{font:800 28px/1.15 var(--display);margin:0 0 8px}
+.byline{font:400 12.5px/1.6 var(--mono);color:var(--muted);border-top:3px double var(--rule);margin-top:26px;padding-top:12px}
+@media (max-width:820px){
+  .game{grid-template-columns:1fr}
+  .mapbox{position:static;max-width:none;margin:6px 0 0}
+  #map{box-shadow:6px 6px 0 var(--red)}
+  .lede{font-size:16px}
+}
+@media (max-width:420px){
+  .guesses li{grid-template-columns:22px minmax(0,1fr) auto auto;gap:8px}
+  .guesses .pc{display:none}
+}
+@media (prefers-reduced-motion:reduce){.clues li.new{animation:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="kick"><b>Daily game</b><span id="kick2">Guess the mystery town</span></div>
+  <h1><span class="u">Where</span><span class="k">abouts</span> <span class="wtag">World</span></h1>
+  <p class="lede">Somewhere in the world is today's mystery <span id="ledeT">country</span>. You have six guesses. Each one tells you how far off you are and which way to go, and unlocks a clue.</p>
+
+  <div class="modes">
+    <div class="tabs type" role="group" aria-label="What to find">
+      <button type="button" data-t="country" aria-pressed="true">Country</button>
+      <button type="button" data-t="capital" aria-pressed="false">Capital</button>
+      <button type="button" data-t="city" aria-pressed="false">City</button>
+      <button type="button" data-t="town" aria-pressed="false">Town</button>
+      <button type="button" data-t="village" aria-pressed="false">Village</button>
+      <button type="button" data-t="region" aria-pressed="false">Region</button>
+    </div>
+    <div class="tabs" role="group" aria-label="Game mode">
+      <button type="button" id="tDaily" aria-pressed="true">Today's country</button>
+      <button type="button" id="tPrac" aria-pressed="false">Practice</button>
+    </div>
+  </div>
+  <p class="tnote" id="tnote"></p>
+
+  <div class="game">
+    <div>
+      <div class="bar"><span id="status">Loading…</span><span id="left"></span></div>
+      <ol class="clues" id="clues" aria-live="polite"></ol>
+      <div id="end" hidden></div>
+      <div class="ask" id="ask">
+        <label for="q">Your guess</label>
+        <div class="row">
+          <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Start typing…" role="combobox" aria-expanded="false" aria-controls="sug" aria-autocomplete="list">
+          <button class="go" id="guessBtn" type="button">Guess</button>
+        </div>
+        <ul class="sug" id="sug" role="listbox" hidden></ul>
+      </div>
+      <p class="msg" id="msg" role="status"></p>
+      <ol class="guesses" id="guesses"></ol>
+    </div>
+    <div class="mapbox">
+      <svg id="map" viewBox="0 0 1000 487" role="img" aria-label="World map showing your guesses"><path id="base"/><g id="cg"></g><path id="ans"/><g id="lines"></g><g id="dots"></g></svg>
+      <div class="legend" aria-hidden="true"><span><i style="background:var(--p3)"></i>under 300 km</span><span><i style="background:var(--p2)"></i>300–1,000</span><span><i style="background:var(--p1)"></i>1,000–3,000</span><span><i style="background:var(--p0)"></i>3,000+</span></div>
+    </div>
+  </div>
+
+  <section class="about" aria-labelledby="ab">
+    <h2 id="ab">How it works</h2>
+    <p>Pick what to find. <b>Country</b>: the world's 196 sovereign countries. <b>Capital</b>: their capital cities. <b>City</b>: today's city is one of about 560 cities of a million people or more; practice adds cities from 500,000. <b>Town</b>: places of 15,000 to 100,000 people. <b>Village</b>: places of 500 to 5,000. <b>Region</b>: about 1,000 states, provinces and regions in 41 countries, from California to Kerala. Each mode has its own daily answer, streak and stats, and the daily list reshuffles each time it runs out. Towns and villages are the better-known ones in each country (those with names in the most languages), capped per country so the whole world gets a turn.</p>
+    <p>After each guess you see the straight-line distance, the direction to the answer and how close you are, from 0% at 20,000 km to 100%. Every wrong guess unlocks the next clue: size, climate, money and health in its country, the oddest thing about its country, where it is, and finally its first letter. At the end you see what the country's name means. For the UK at a closer zoom, play <a href="https://maps.tristanhotham.com/whereabouts/">Whereabouts UK</a>; for country numbers head to head, <a href="https://maps.tristanhotham.com/higher-or-lower-world/">Higher or Lower World</a>.</p>
+    <p>Places, populations and capitals come from GeoNames. Climate is NASA POWER's long-term average temperature for the place. Country facts are the 67 measures in Higher or Lower World (CIA World Factbook, FAO and others via Our World in Data, UNESCO, USGS and Wikipedia). Name meanings are from my <a href="https://maps.tristanhotham.com/country-names/">country names</a> study (Wikipedia, CC BY-SA). Borders: Natural Earth.</p>
+  </section>
+
+  <p class="byline">Dr Tristan Hotham, Independent researcher · 2026 · Data: GeoNames (CC BY 4.0); NASA POWER climatology; CIA World Factbook; Our World in Data (CC BY 4.0); UNESCO; USGS; Wikipedia (CC BY-SA 4.0); Natural Earth. <a href="https://github.com/Tristan-Hotham/whereabouts-world">Data and code</a></p>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+var LAUNCH=Date.UTC(2026,9,29), MAXG=6, URL_SHORT="maps.tristanhotham.com/whereabouts-world";
+var M=null,G=[],A=[],AD=[],D=null,mode="daily",st=null,sel=-1,matches=[],TYPE="country",DATA={},ORDS={};
+var TY={country:{one:"country",seed:20261029,note:"The world's 196 countries."},
+capital:{one:"capital",seed:20261030,note:"The capital cities of 195 countries."},
+city:{one:"city",seed:20261031,note:"Cities of a million people or more (500,000 in practice). Guess any city of 100,000+."},
+town:{one:"town",seed:20261101,note:"Towns of 15,000 to 100,000 people. Guess any of about 34,000 towns and cities."},
+village:{one:"village",seed:20261102,note:"Villages of 500 to 5,000 people. Guess any town, city or village in the list."},
+region:{one:"region",seed:20261103,note:"About 1,000 states, provinces and regions in 41 countries."}};
+var $=function(id){return document.getElementById(id)};
+var store={get:function(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+function skey(k){return "ww-"+TYPE+"-"+k}
+function rng(seed){var a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function dayNo(key){var p=key.split("-");return Math.round((Date.UTC(+p[0],p[1]-1,+p[2])-LAUNCH)/864e5)+1}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function norm(s){return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g," ").trim()}
+function km(a,b,c,d){var R=6371,r=Math.PI/180,p1=a*r,p2=c*r,dp=p2-p1,dl=(d-b)*r;var h=Math.sin(dp/2)*Math.sin(dp/2)+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)*Math.sin(dl/2);return 2*R*Math.asin(Math.sqrt(h))}
+function bearing(a,b,c,d){var r=Math.PI/180,y=Math.sin((d-b)*r)*Math.cos(c*r),x=Math.cos(a*r)*Math.sin(c*r)-Math.sin(a*r)*Math.cos(c*r)*Math.cos((d-b)*r);return(Math.atan2(y,x)/r+360)%360}
+var ARROWS=["⬆️","↗️","➡️","↘️","⬇️","↙️","⬅️","↖️"];
+function arrow(deg){return ARROWS[Math.round(deg/45)%8]}
+function band(k){return k<300?3:k<1000?2:k<3000?1:0}
+var SQ=["🟥","🟧","🟨","🟩"];
+// Equal Earth projection, matching the build
+var A1=1.340264,A2=-0.081106,A3=0.000893,A4=0.003796,MM=Math.sqrt(3)/2;
+function ee(lon,lat){var p=Math.asin(MM*Math.sin(lat*Math.PI/180)),p2=p*p,p6=p2*p2*p2;return[lon*Math.PI/180*Math.cos(p)/(MM*(A1+3*A2*p2+p6*(7*A3+9*A4*p2))),p*(A1+A2*p2+p6*(A3+A4*p2))]}
+var XM=ee(180,0)[0],YM=ee(0,90)[1],SC=1000/(2*XM);
+function xy(lat,lon){var e=ee(lon,lat);return[(e[0]+XM)*SC,(YM-e[1])*SC]}
+function cname(cc){return (D&&D.cn&&D.cn[cc])||cc}
+function glabel(g){
+  if(TYPE==="country")return g[4];
+  if(TYPE==="region")return cname(g[3]);
+  var a=(D.a1&&g[4]>=0)?D.a1[g[4]]:"";return (a?a+", ":"")+cname(g[3]);
+}
+function quip(k,g,a){
+  var r=function(arr){return arr[Math.floor(Math.random()*arr.length)]};
+  var sameC=g[3]===a.c;
+  var s=k<100?"Practically next door.":k<300?r(["Very warm. You can almost smell the cooking.","Very warm. Same neighbourhood, nearly."]):k<800?"Warm. Right part of the world.":k<1500?r(["Getting there.","Lukewarm. Keep going."]):k<3000?"Chilly.":k<6000?"Cold. Wrong part of the continent, or the wrong continent.":k<12000?r(["Freezing. Pack a coat.","Very cold. Try another continent."]):"Other side of the planet!";
+  if(TYPE!=="country"&&sameC&&k>=300)s+=" Right country, though!";
+  if(TYPE!=="country"&&!sameC&&k<300)s+=" But wrong country!";
+  return s;
+}
+function setMode(m){
+  mode=m;$("tDaily").setAttribute("aria-pressed",m==="daily");$("tPrac").setAttribute("aria-pressed",m==="practice");
+  $("tDaily").textContent="Today's "+TY[TYPE].one;
+  if(m==="daily")startDaily();else startPractice();
+}
+function order(cy){var r=rng(TY[TYPE].seed+cy*7919),idx=AD.map(function(_,i){return i});for(var i=idx.length-1;i>0;i--){var j=Math.floor(r()*(i+1));var t=idx[i];idx[i]=idx[j];idx[j]=t}return idx}
+function startDaily(){
+  var key=today(),n=dayNo(key),L=AD.length,i=((n-1)%L+L)%L,cy=Math.floor((n-1)/L),ok=TYPE+cy;
+  if(!ORDS[ok])ORDS[ok]=order(cy);
+  var a=AD[ORDS[ok][i]];
+  st={key:key,no:n,a:a,g:[],done:false,won:false};
+  var saved=store.get(skey("d-"+key));
+  if(saved&&saved.g){saved.g.forEach(function(i){if(G[i])apply(G[i],true)})}
+  render();
+}
+function startPractice(){
+  var a=A[Math.floor(Math.random()*A.length)];
+  var dm=location.search.match(/demo=([^&]+)/);if(dm){a=A.find(function(x){return x.n===decodeURIComponent(dm[1])})||a}
+  st={key:null,no:null,a:a,g:[],done:false,won:false,practice:true};render();setTimeout(function(){$("q").focus()},50);
+}
+function apply(g,silent){
+  var a=st.a,k=km(g[1],g[2],a.lat,a.lon),win=g[0]===a.n&&g[3]===a.c&&(TYPE==="country"||TYPE==="region"||k<25);
+  st.g.push({g:g,k:win?0:k,b:bearing(g[1],g[2],a.lat,a.lon),win:win,q:win?"":quip(k,g,a)});
+  if(win){st.done=true;st.won=true}else if(st.g.length>=MAXG){st.done=true}
+  if(!silent&&st.key){store.set(skey("d-"+st.key),{g:st.g.map(function(x){return G.indexOf(x.g)})});if(st.done)stats()}
+}
+function stats(){
+  var s=store.get(skey("stats"))||{played:0,wins:0,streak:0,best:0,dist:[0,0,0,0,0,0],last:null};
+  if(s.last===st.key)return;
+  s.played++;if(st.won){s.wins++;s.dist[st.g.length-1]++;s.streak=(s.last&&dayNo(st.key)-dayNo(s.last)===1&&s.lastWon?s.streak:0)+1;s.best=Math.max(s.best,s.streak)}else s.streak=0;
+  s.last=st.key;s.lastWon=st.won;store.set(skey("stats"),s);
+}
+function pc(k){return Math.min(99,Math.max(0,Math.floor(100*(1-k/20000))))}
+function render(){
+  var a=st.a,n=st.g.length,open=st.done?6:Math.min(6,n+1);
+  $("status").textContent=st.practice?"Practice":"Day "+st.no;
+  $("left").textContent=st.done?"":(MAXG-n)+" guess"+(MAXG-n===1?"":"es")+" left";
+  var h="";for(var i=0;i<6;i++){h+=i<open?'<li'+(i===open-1&&n>0&&!st.done?' class="new"':'')+'>'+esc(a.clues[i])+'</li>':'<li class="lock">Unlocks after guess '+i+'</li>'}
+  $("clues").innerHTML=h;
+  $("guesses").innerHTML=st.g.map(function(x,i){
+    var b=band(x.k);
+    return '<li><span class="n">'+(i+1)+'</span><span class="nm">'+esc(x.g[0])+'<small>'+esc(glabel(x.g))+'</small></span>'+(x.win?'<span class="d">🎯</span><span></span><span class="pc" style="background:var(--p3)">100%</span>':'<span class="d">'+Math.round(x.k).toLocaleString("en-GB")+' km</span><span class="ar" aria-label="direction">'+arrow(x.b)+'</span><span class="pc" style="background:var(--p'+b+')">'+pc(x.k)+'%</span>')+(x.q?'<span class="quip">'+esc(x.q)+'</span>':'')+'</li>'}).join("");
+  $("ask").hidden=st.done;
+  drawMap();
+  if(st.done)endCard();else $("end").hidden=true;
+}
+function shape(x){ // path for a guess or answer in area modes
+  if(TYPE==="country")return M.p[x]||"";
+  if(TYPE==="region")return (D.p&&D.p[x])||"";
+  return "";
+}
+function drawMap(){
+  if(!M)return;var a=st.a,dots="",lines="",cg="",pts=[];
+  if(TYPE==="country"||TYPE==="region")st.g.forEach(function(x){if(!x.win)cg+='<path d="'+shape(TYPE==="country"?x.g[3]:x.g[4])+'" fill="var(--p'+band(x.k)+')" fill-opacity=".6"/>'});
+  $("cg").innerHTML=cg;
+  st.g.forEach(function(x){pts.push(xy(x.g[1],x.g[2]))});
+  var q=xy(a.lat,a.lon);if(st.done)pts.push(q);
+  // zoom to fit
+  var vb=[0,0,1000,487];
+  if(pts.length){var x0=Math.min.apply(null,pts.map(function(p){return p[0]})),x1=Math.max.apply(null,pts.map(function(p){return p[0]})),y0=Math.min.apply(null,pts.map(function(p){return p[1]})),y1=Math.max.apply(null,pts.map(function(p){return p[1]}));
+    var w=Math.max(x1-x0,TYPE==="village"||TYPE==="town"?60:90)*1.5,h=Math.max(y1-y0,40)*1.5,ar=1000/487;if(w/h<ar)w=h*ar;else h=w/ar;if(w>1000){w=1000;h=487}
+    var cx=(x0+x1)/2,cy=(y0+y1)/2;vb=[Math.max(-20,Math.min(cx-w/2,1020-w)),Math.max(-10,Math.min(cy-h/2,497-h)),w,h]}
+  $("map").setAttribute("viewBox",vb.map(function(v){return v.toFixed(1)}).join(" "));
+  var k=vb[2]/1000,r=Math.max(2.2,17*k*1.0);$("map").style.setProperty("--sw",(0.6*k).toFixed(3));$("map").style.setProperty("--dr",(r)+"px");
+  st.g.forEach(function(x,i){var p=xy(x.g[1],x.g[2]),col=x.win?"var(--p3)":"var(--p"+band(x.k)+")";dots+='<g class="dot"><circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="'+r.toFixed(2)+'" fill="'+col+'" stroke="var(--card)" stroke-width="'+(r*.18).toFixed(2)+'"/><text x="'+p[0].toFixed(1)+'" y="'+p[1].toFixed(1)+'" style="font-size:'+(r*1.25).toFixed(2)+'px">'+(i+1)+'</text></g>'});
+  if(st.done){
+    $("ans").setAttribute("d",TYPE==="region"?shape(a.id):(M.p[a.c]||""));
+    $("ans").setAttribute("fill-opacity",TYPE==="region"||TYPE==="country"?"1":".35");
+    st.g.forEach(function(x){if(x.win)return;var p=xy(x.g[1],x.g[2]);lines+='<line x1="'+p[0].toFixed(1)+'" y1="'+p[1].toFixed(1)+'" x2="'+q[0].toFixed(1)+'" y2="'+q[1].toFixed(1)+'" stroke="var(--muted)" stroke-width="'+(r*.15).toFixed(2)+'" stroke-dasharray="'+(r*.4).toFixed(2)+' '+(r*.35).toFixed(2)+'"/>'});
+    dots+='<g><circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r="'+(r*1.3).toFixed(2)+'" fill="var(--fg)"/><text x="'+q[0].toFixed(1)+'" y="'+(q[1]+r*.06).toFixed(1)+'" style="font:900 '+(r*1.5).toFixed(2)+'px var(--display);fill:var(--bg);text-anchor:middle;dominant-baseline:central">★</text></g>';
+  }else $("ans").setAttribute("d","");
+  $("dots").innerHTML=dots;$("lines").innerHTML=lines;
+}
+function grid(){return st.g.map(function(x){return x.win?"🎯":SQ[band(x.k)]+arrow(x.b)}).join("\n")}
+function untilMidnight(){var n=new Date(),m=new Date(n);m.setHours(24,0,0,0);var s=Math.round((m-n)/1000);return Math.floor(s/3600)+"h "+Math.floor(s%3600/60)+"m"}
+function rp(p){return p>=1e6?(+(p/1e6).toPrecision(2))+" million":(+p.toPrecision(2)).toLocaleString("en-GB")}
+function cap1(s){return s[0].toUpperCase()+s.slice(1)}
+function endCard(){
+  var a=st.a,n=st.g.length,best=st.g.reduce(function(m,x){return Math.min(m,x.k)},1e9);
+  var head=st.won?(n===1?"First guess! Unbelievable.":n<=3?"Got it in "+n+". Very good.":"Got it in "+n+"."):"So close. It was "+a.n+".";
+  var where=TYPE==="country"?a.area:(TYPE==="region"?cap1(a.kind)+" of "+a.cn:a.area);
+  var t='<div class="small">'+(st.practice?"Practice":"Day "+st.no)+'</div><h2>'+esc(head)+'</h2><div class="where">'+esc(a.n)+' · '+esc(where)+(a.pop?' · about '+rp(a.pop)+' people':'')+'</div>';
+  if(a.m)t+='<div class="mean"><b>'+(TYPE==="country"?"What the name means.":"What "+esc(a.cn)+"'s name means.")+'</b> '+esc(a.m)+'</div>';
+  if(!st.won)t+='<p class="small">Your closest guess was '+Math.round(best).toLocaleString("en-GB")+' km away.</p>';
+  t+='<div class="grid" aria-label="Your guesses as coloured squares and arrows">'+grid()+'</div>';
+  t+='<div class="btns"><button type="button" class="go big" id="share">Share</button><button type="button" class="go ghost big" id="again">'+(st.practice?"Another "+TY[TYPE].one:"Practice")+'</button><a class="go ghost big" style="text-decoration:none;display:inline-flex;align-items:center" href="https://maps.tristanhotham.com/higher-or-lower-world/">Play Higher or Lower World</a></div>';
+  if(!st.practice){
+    var s=store.get(skey("stats"))||{played:0,wins:0,streak:0,best:0,dist:[0,0,0,0,0,0]},mx=Math.max.apply(null,s.dist.concat([1]));
+    t+='<p class="small">A new '+TY[TYPE].one+' in '+untilMidnight()+'.</p><div class="stats"><div><b>'+s.played+'</b>played</div><div><b>'+(s.played?Math.round(100*s.wins/s.played):0)+'%</b>won</div><div><b>'+s.streak+'</b>streak</div><div><b>'+s.best+'</b>best</div></div><div class="dist">'+s.dist.map(function(v,i){return '<div class="'+(st.won&&i===n-1?"me":"")+'">'+(i+1)+' <span style="width:'+Math.max(8,Math.round(100*v/mx))+'%">'+v+'</span></div>'}).join("")+'</div>';
+  }
+  $("end").innerHTML='<div class="end">'+t+'</div>';$("end").hidden=false;
+  $("share").onclick=share;$("again").onclick=function(){setMode("practice")};
+}
+function toast(t){var e=$("toast");e.textContent=t;e.classList.add("on");setTimeout(function(){e.classList.remove("on")},1800)}
+function share(){
+  var lab=" "+cap1(TY[TYPE].one);
+  var t=(st.practice?"Whereabouts World"+lab+" practice":"Whereabouts World"+lab+" #"+st.no)+" "+(st.won?st.g.length:"X")+"/6\n"+grid()+"\n"+URL_SHORT;
+  if(navigator.share&&/Mobi|Android|iPhone|iPad/.test(navigator.userAgent)){navigator.share({text:t}).catch(function(){});return}
+  if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){toast("Copied: paste it anywhere")},function(){prompt("Copy this:",t)});else prompt("Copy this:",t);
+}
+function suggest(){
+  var v=norm($("q").value);$("msg").textContent="";
+  if(!v){hideSug();return}
+  var starts=[],has=[];
+  for(var i=0;i<G.length;i++){var nn=G[i].nn;if(nn.indexOf(v)===0)starts.push(i);else if(has.length<50&&nn.indexOf(" "+v)>=0)has.push(i)}
+  starts.sort(function(a,b){return (G[b].w||0)-(G[a].w||0)||G[a][0].length-G[b][0].length});
+  matches=starts.concat(has).slice(0,8);sel=matches.length?0:-1;
+  if(!matches.length){hideSug();return}
+  $("sug").innerHTML=matches.map(function(i,k){return '<li role="option" id="s'+k+'" aria-selected="'+(k===sel)+'" data-i="'+i+'"><span>'+esc(G[i][0])+'</span><small>'+esc(glabel(G[i]))+'</small></li>'}).join("");
+  $("sug").hidden=false;$("q").setAttribute("aria-expanded","true");
+}
+function hideSug(){$("sug").hidden=true;$("q").setAttribute("aria-expanded","false");matches=[];sel=-1}
+function mark(){[].forEach.call($("sug").children,function(li,k){li.setAttribute("aria-selected",k===sel);if(k===sel){li.scrollIntoView({block:"nearest"});$("q").setAttribute("aria-activedescendant",li.id)}})}
+function submit(i){
+  if(st.done)return;
+  if(i==null){var v=norm($("q").value);if(sel>=0&&matches.length)i=matches[sel];else{var ex=G.findIndex(function(g){return g.nn===v});if(ex<0){$("msg").textContent=v?"Pick one from the list.":"";return}i=ex}}
+  var g=G[i];
+  if(st.g.some(function(x){return x.g===g})){$("msg").textContent="You've already guessed "+g[0]+".";return}
+  apply(g,false);$("q").value="";hideSug();render();
+  if(!st.done)$("q").focus();else $("end").scrollIntoView({block:"nearest",behavior:"smooth"});
+}
+$("q").addEventListener("input",suggest);
+$("q").addEventListener("keydown",function(e){
+  if(e.key==="ArrowDown"&&matches.length){sel=(sel+1)%matches.length;mark();e.preventDefault()}
+  else if(e.key==="ArrowUp"&&matches.length){sel=(sel-1+matches.length)%matches.length;mark();e.preventDefault()}
+  else if(e.key==="Enter"){submit();e.preventDefault()}
+  else if(e.key==="Escape")hideSug();
+});
+$("sug").addEventListener("mousedown",function(e){var li=e.target.closest("li");if(li){e.preventDefault();submit(+li.dataset.i)}});
+$("guessBtn").onclick=function(){submit()};
+document.addEventListener("click",function(e){if(!e.target.closest(".ask"))hideSug()});
+$("tDaily").onclick=function(){setMode("daily")};$("tPrac").onclick=function(){setMode("practice")};
+function load(t){
+  var f="w_"+t+".json";
+  if(DATA[f])return Promise.resolve(DATA[f]);
+  return fetch(f).then(function(r){return r.json()}).then(function(j){DATA[f]=j;
+    // weight suggestions: answers first
+    var nm={};j.answers.forEach(function(a){nm[a.n+"|"+a.c]=1});
+    j.guess.forEach(function(g){g.nn=norm(g[0]);g.w=nm[g[0]+"|"+g[3]]?1:0});
+    return j});
+}
+function setType(t,m){
+  if(!TY[t])t="country";
+  [].forEach.call(document.querySelectorAll(".tabs.type button"),function(b){b.setAttribute("aria-pressed",b.dataset.t===t)});
+  $("status").textContent="Loading…";
+  load(t).then(function(j){
+    TYPE=t;D=j;store.set("ww-type",t);A=j.answers;G=j.guess;AD=A.filter(function(a){return a.d});
+    var one=TY[t].one;
+    $("kick2").textContent="Find the mystery "+one;$("ledeT").textContent=one;$("tnote").textContent=TY[t].note;
+    $("q").placeholder="Start typing a "+(t==="village"?"place":one)+"…";
+    $("q").value="";hideSug();$("msg").textContent="";
+    setMode(m||mode);
+  }).catch(function(){$("status").textContent="Sorry, that didn't load. Try refreshing."});
+}
+[].forEach.call(document.querySelectorAll(".tabs.type button"),function(b){b.onclick=function(){setType(b.dataset.t)}});
+fetch("map.json").then(function(r){return r.json()}).then(function(m){
+  M=m;$("base").setAttribute("d",Object.keys(M.p).map(function(k){return M.p[k]}).join(""));
+  var qt=(location.search.match(/[?&]type=(\w+)/)||[])[1]||store.get("ww-type")||"country";
+  setType(qt,/[?&]mode=practice/.test(location.search)?"practice":"daily");
+}).catch(function(){$("status").textContent="Sorry, the game didn't load. Try refreshing."});
+})();
+</script>
+<script src="/assets/site-nav.js" defer></script>
+</body>
+</html>
