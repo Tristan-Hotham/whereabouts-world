@@ -1,0 +1,131 @@
+import json,csv,math,re
+from collections import defaultdict
+from shapely.geometry import Point
+from shapely import STRtree
+import geonamescache
+exec(open('countries.py').read())
+gc=geonamescache.GeonamesCache(); I3={v['iso3']:k for k,v in gc.get_countries().items()}
+W=json.load(open('wiki.json')); O=json.load(open('raw/owid.json'))
+S=[c for c,d in C.items() if d['sov']]
+def fb(k): return {c:C[c]['fb'].get(k) for c in S if C[c]['fb'].get(k) is not None}
+def ow(slug,col=0): return {I3[k]:v[1+col] for k,v in O[slug]['v'].items() if k in I3 and v[1+col] is not None}
+pop=fb('pop'); area=fb('area')
+def per(d,n=1e6): return {c:v/pop[c]*n for c,v in d.items() if c in pop and pop[c]>0}
+# earthquakes
+codes=[c for c in C]; geoms=[C[c]['geom'] for c in codes]; tree=STRtree(geoms)
+q=defaultdict(int); n_assigned=0
+for l in open('raw/quakes.csv'):
+    la,lo,_,m,y=l.strip().split(',')
+    p=Point(float(lo),float(la)); hit=None
+    for i in tree.query(p):
+        if geoms[i].contains(p): hit=codes[i];break
+    if not hit:
+        i=tree.nearest(p)
+        if geoms[i].distance(p)<0.9: hit=codes[i]
+    if hit: q[hit]+=1; n_assigned+=1
+print('quakes assigned',n_assigned)
+whs=defaultdict(int)
+for l in open('raw/whs.tsv'):
+    for c in l.split('\t')[1].split(','):
+        if c.strip(): whs[c.strip().upper()]+=1
+nb={c:len(C[c]['nb']) for c in S}
+low=fb('low')
+M=[]
+def add(id,group,label,q,unit,fmt,v,source,year,link=None,dp=1,note=None,zero=True,minn=40):
+    v={c:float(x) for c,x in v.items() if c in S and x is not None and (zero or x!=0)}
+    if len(v)<minn: print('SKIP',id,len(v)); return
+    M.append(dict(id=id,group=group,label=label,q=q,unit=unit,fmt=fmt,source=source,year=year,link=link,dp=dp,note=note,v=v))
+FBL='https://www.cia.gov/the-world-factbook/'
+WK=lambda t:'https://en.wikipedia.org/wiki/'+t.replace(' ','_')
+OWL=lambda s:'https://ourworldindata.org/grapher/'+s
+P='People'; MN='Money and work'; FD='Food and drink'; PL='Land and weather'; TR='Getting about'; FUN='Just for fun'
+add('pop',P,'Population','has more people','people','int',pop,'CIA World Factbook','2025 est.',FBL)
+add('density',P,'Population density','is more crowded (more people per km²)','people per km²','int',{c:pop[c]/area[c] for c in pop if area.get(c)},'CIA World Factbook','2025',FBL)
+add('medage',P,'Median age','has an older population (higher median age)','years','1',fb('medage'),'CIA World Factbook','2025 est.',FBL)
+add('life',P,'Life expectancy','has a longer life expectancy','years','1',fb('life'),'CIA World Factbook','2024 est.',FBL)
+add('fert',P,'Children per woman','has more children per woman','children','2',fb('fert'),'CIA World Factbook','2025 est.',FBL)
+add('urban',P,'Living in towns and cities','has more of its people living in towns and cities','%','pct',fb('urban'),'CIA World Factbook','2023',FBL)
+add('firstbirth',P,"Mother's age at first birth",'has older first-time mothers','years','1',fb('firstbirth'),'CIA World Factbook','latest',FBL)
+add('happy',P,'Life satisfaction','is happier (higher life satisfaction)','out of 10','2',ow('happiness-cantril-ladder'),'World Happiness Report via Our World in Data','2025',OWL('happiness-cantril-ladder'))
+add('height',P,'Average height of men','has taller men','cm','1',ow('average-height-of-men'),'NCD-RisC via Our World in Data','1996 (latest)',OWL('average-height-of-men'))
+add('languages',P,'Living languages','has more living languages','languages','int',W['languages'],'Ethnologue via Wikipedia','latest',WK('List of countries by number of languages'))
+add('gdppc',MN,'GDP per person','is richer (higher GDP per person)','$ (PPP)','usd',fb('gdppc'),'CIA World Factbook','2024 est.',FBL,note='real GDP per person at purchasing power parity')
+add('unemp',MN,'Unemployment rate','has higher unemployment','%','pct',fb('unemp'),'CIA World Factbook','latest',FBL)
+add('hours',MN,'Hours worked a year','works longer hours','hours per worker','int',ow('annual-working-hours-per-worker'),'Penn World Table via Our World in Data','latest',OWL('annual-working-hours-per-worker'))
+add('debt',MN,'Public debt','has more government debt for the size of its economy','% of GDP','pct',fb('debt'),'CIA World Factbook','latest',FBL)
+add('military',MN,'Military spending','spends more of its economy on the military','% of GDP','pct',{c:v for c,v in fb('military').items() if v<50},'CIA World Factbook','latest',FBL)
+add('foodspend',MN,'Share of spending on food','spends more of the household budget on food','% of spending','pct',fb('foodspend'),'CIA World Factbook','latest',FBL)
+add('billionaires',MN,'Billionaires','has more billionaires','billionaires','int',W['billionaires'],'Forbes via Wikipedia','2026',WK('List of countries by number of billionaires'),minn=30)
+add('internet',MN,'Internet users','has more of its people online','%','pct',fb('internet'),'CIA World Factbook','2023',FBL)
+add('alcohol',FD,'Alcohol drunk per person','drinks more alcohol per person','litres of pure alcohol a year','1',fb('alcohol'),'WHO via CIA World Factbook','2019',FBL)
+add('beer',FD,'Beer drunk per person','drinks more beer per person','litres a year','1',W['beer'],'Kirin and others via Wikipedia','latest',WK('List of countries by beer consumption per capita'))
+add('wine',FD,'Wine drunk per person','drinks more wine per person','litres of pure alcohol a year','2',fb('wine'),'WHO via CIA World Factbook','2019',FBL)
+add('spirits',FD,'Spirits drunk per person','drinks more spirits per person','litres of pure alcohol a year','2',fb('spirits'),'WHO via CIA World Factbook','2019',FBL)
+add('tea',FD,'Tea drunk per person','drinks more tea per person','kg a year','2',W['tea'],'Wikipedia','latest',WK('List of countries by tea consumption per capita'))
+add('meat',FD,'Meat eaten per person','eats more meat per person','grams a day','int',ow('daily-meat-consumption-per-person'),'FAO via Our World in Data','2023',OWL('daily-meat-consumption-per-person'))
+add('fish',FD,'Fish and seafood eaten per person','eats more fish and seafood per person','kg a year','1',ow('fish-and-seafood-consumption-per-capita'),'FAO via Our World in Data','2023',OWL('fish-and-seafood-consumption-per-capita'))
+add('eggs',FD,'Eggs eaten per person','eats more eggs per person','kg a year','1',ow('per-capita-egg-consumption-kilograms-per-year'),'FAO via Our World in Data','2023',OWL('per-capita-egg-consumption-kilograms-per-year'))
+add('milk',FD,'Milk drunk per person','drinks more milk per person','kg a year','int',ow('per-capita-milk-consumption'),'FAO via Our World in Data','2023',OWL('per-capita-milk-consumption'))
+add('fruit',FD,'Fruit eaten per person','eats more fruit per person','kg a year','int',ow('fruit-consumption-per-capita'),'FAO via Our World in Data','2023',OWL('fruit-consumption-per-capita'))
+add('veg',FD,'Vegetables eaten per person','eats more vegetables per person','kg a year','int',ow('vegetable-consumption-per-capita'),'FAO via Our World in Data','2023',OWL('vegetable-consumption-per-capita'))
+add('calories',FD,'Calories per person','has more calories on the table per person','kcal a day','int',ow('daily-per-capita-caloric-supply'),'FAO via Our World in Data','2023',OWL('daily-per-capita-caloric-supply'))
+add('obesity',FD,'Adults with obesity','has a higher share of adults with obesity','%','pct',fb('obesity'),'WHO via CIA World Factbook','2016',FBL)
+add('tobacco',FD,'Tobacco use','has more tobacco users','%','pct',fb('tobacco'),'WHO via CIA World Factbook','latest',FBL)
+add('coffee',FD,'Coffee grown','grows more coffee','tonnes a year','int',ow('coffee-bean-production'),'FAO via Our World in Data','2024',OWL('coffee-bean-production'),minn=30,zero=False)
+add('cocoa',FD,'Cocoa grown','grows more cocoa beans','tonnes a year','int',ow('cocoa-bean-production'),'FAO via Our World in Data','2024',OWL('cocoa-bean-production'),minn=30,zero=False)
+add('bananas',FD,'Bananas grown','grows more bananas','tonnes a year','int',ow('banana-production'),'FAO via Our World in Data','2024',OWL('banana-production'),zero=False)
+add('rice',FD,'Rice grown','grows more rice','tonnes a year','int',ow('rice-production'),'FAO via Our World in Data','2024',OWL('rice-production'),zero=False)
+add('wineprod',FD,'Wine made','makes more wine','tonnes a year','int',ow('wine-production'),'FAO via Our World in Data','2023',OWL('wine-production'),zero=False)
+add('potatoes',FD,'Potatoes grown','grows more potatoes','tonnes a year','int',W['potato'],'FAO via Wikipedia','2022',WK('List of countries by potato production'))
+add('area',PL,'Area','is bigger','km²','int',area,'CIA World Factbook','latest',FBL)
+add('coast',PL,'Coastline','has a longer coastline','km','int',fb('coast'),'CIA World Factbook','latest',FBL,zero=False)
+add('high',PL,'Highest point','has a higher highest point','metres','int',fb('high'),'CIA World Factbook','latest',FBL)
+add('meanelev',PL,'Average height above sea level','sits higher on average (mean elevation)','metres','int',fb('meanelev'),'CIA World Factbook','latest',FBL)
+add('forest',PL,'Forest','is more forested','% of land','pct',fb('forest'),'CIA World Factbook','2023',FBL)
+add('temp',PL,'Average temperature','is warmer on average','°C','1',W['temp'],'Climatic Research Unit and World Bank via Wikipedia','1991–2020',WK('List of countries by average yearly temperature'))
+add('rain',PL,'Rainfall','gets more rain','mm a year','int',W['rain'],'World Bank via Wikipedia','latest',WK('List of countries by average annual precipitation'))
+add('whs',PL,'World Heritage Sites','has more UNESCO World Heritage Sites','sites','int',dict(whs),'UNESCO World Heritage Centre','2025',"https://whc.unesco.org/en/list/",zero=False)
+add('neighbours',PL,'Land neighbours','has more countries on its land borders','countries','int',{c:v for c,v in nb.items() if v},'GeoNames','2026','https://www.geonames.org/')
+add('airports',TR,'Airports','has more airports and airstrips','airports','int',fb('airports'),'CIA World Factbook','2025',FBL)
+add('rail',TR,'Railway','has more railway','km','int',fb('rail'),'CIA World Factbook','latest',FBL)
+add('vehicles',TR,'Motor vehicles','has more motor vehicles per person','per 1,000 people','int',W['vehicles'],'Wikipedia','latest',WK('List of countries and territories by motor vehicles per capita'))
+add('flyers',TR,'Air passengers','has airlines that fly more passengers per person','passengers per person','2',per(ow('air-passengers-carried'),1),'World Bank via Our World in Data','2023',OWL('air-passengers-carried'),note='passengers carried by airlines registered in the country, so budget-airline hubs like Ireland score high')
+add('tourists',TR,'Tourists','gets more foreign tourists a year','arrivals','int',ow('international-tourist-trips'),'UN Tourism via Our World in Data','latest',OWL('international-tourist-trips'))
+add('mobile',TR,'Mobile phone contracts','has more mobile phone subscriptions per person','per 100 people','int',{c:v for c,v in fb('mobile').items() if v<300},'CIA World Factbook','2024',FBL)
+add('quakes',FUN,'Big earthquakes since 1900','has had more big earthquakes (magnitude 6+, on land or just offshore) since 1900','earthquakes','int',dict(q),'USGS earthquake catalogue','1900–2026','https://earthquake.usgs.gov/earthquakes/search/',zero=False,minn=30)
+add('olympic',FUN,'Olympic medals','has won more Olympic medals (summer and winter)','medals','int',W['olympic'],'Wikipedia','all time',WK('All-time Olympic Games medal table'),zero=False)
+add('olypc',FUN,'Olympic medals per person','has won more Olympic medals per million people','per million people','1',{c:v for c,v in per(W['olympic']).items() if v>0},'Wikipedia','all time',WK('All-time Olympic Games medal table'))
+add('worldcup',FUN,'World Cup appearances','has played at more men\'s football World Cups','tournaments','int',W['worldcup'],'Wikipedia','to 2026',WK('National team appearances in the FIFA World Cup'))
+add('nobel',FUN,'Nobel laureates','has more Nobel laureates','laureates','int',W['nobel'],'Wikipedia','all time',WK('List of Nobel laureates by country'))
+add('mcd',FUN,"McDonald's per person","has more McDonald's restaurants per person",'per million people','1',per(W['mcd']),"Wikipedia",'latest',WK("List of countries with McDonald's restaurants"))
+add('ikea',FUN,'IKEA stores','has more IKEA stores','stores','int',W['ikea'],'Wikipedia','latest',WK('IKEA'),minn=30)
+add('islands',FUN,'Islands','has more islands','islands','int',W['islands'],'Wikipedia','latest',WK('List of countries by number of islands'))
+add('timezones',FUN,'Time zones','spans more time zones (including overseas territories)','time zones','int',W['timezones'],'Wikipedia','latest',WK('List of time zones by country'))
+#add('lowest',FUN,'Lowest point','goes lower: whose lowest point is further down','metres','int',{c:-v for c,v in low.items()},'CIA World Factbook','latest',FBL,note='shown as metres below sea level; positive means the lowest point is above sea level')
+add('heliports',FUN,'Heliports','has more heliports','heliports','int',fb('heliports'),'CIA World Factbook','2025',FBL)
+add('reactors',FUN,'Nuclear reactors','has more working nuclear reactors','reactors','int',fb('reactors'),'CIA World Factbook','2025',FBL,minn=25)
+add('ships',FUN,'Merchant ships','has more merchant ships flying its flag','ships','int',fb('ships'),'CIA World Factbook','2023',FBL)
+add('eurovision',FUN,'Eurovision wins','has won Eurovision more times','wins','int',W['eurovision'],'Wikipedia','to 2026',WK('List of Eurovision Song Contest winners'),minn=20)
+add('missuni',FUN,'Miss Universe titles','has won Miss Universe more times','titles','int',W['missuniverse'],'Wikipedia','to 2025',WK('List of Miss Universe titleholders'),minn=20)
+print(len(M),'measures')
+for m in M: print(m['id'],len(m['v']),end='; ')
+
+import geo
+MAP={'p':{},'c':{},'b':{},'w':geo.W,'h':geo.H}
+for c,d in C.items():
+    MAP['p'][c]=geo.path(d['geom'],0.08)
+    x,y=geo.xy(d['lx'],d['ly']); MAP['c'][c]=[x,y]
+    b=d['geom'].bounds; x0,y1=geo.xy(b[0],b[1]); x1,y0=geo.xy(b[2],b[3])
+    # use the biggest polygon's bounds for far-flung countries
+    g=d['geom']; big=max(g.geoms,key=lambda p:p.area) if hasattr(g,'geoms') else g
+    bb=big.bounds; X0,Y1=geo.xy(bb[0],bb[1]); X1,Y0=geo.xy(bb[2],bb[3])
+    MAP['b'][c]=[min(X0,x),min(Y0,y),max(X1,x),max(Y1,y)]
+places={c:[C[c]['name'],C[c]['cont'],C[c]['sub']] for c in S}
+json.dump(dict(places=places,cats=M),open('site/data.json','w'),ensure_ascii=False,separators=(',',':'))
+json.dump(MAP,open('site/map.json','w'),separators=(',',':'))
+
+if __name__=='__main__' and 'CHECK' in globals().get('__builtins__',{}).__dict__ if False else True:
+    nm=lambda c:C[c]['name']
+    for m in M:
+        ks=sorted(m['v'],key=lambda c:-m['v'][c])
+        print(f"{m['id']:12} top: "+', '.join(f"{nm(c)} {m['v'][c]:,.4g}" for c in ks[:3])+' | bottom: '+', '.join(f"{nm(c)} {m['v'][c]:,.4g}" for c in ks[-2:])+f" | UK {m['v'].get('GB','-')}")

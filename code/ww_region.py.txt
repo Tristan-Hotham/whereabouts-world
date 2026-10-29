@@ -1,0 +1,69 @@
+exec(open('ww_build.py').read().split('# ---------- country mode ----------')[0])
+from shapely.ops import unary_union
+from shapely.geometry import shape
+from pyproj import Geod
+geod=Geod(ellps='WGS84')
+KEEP='USA CAN AUS IND CHN BRA MEX DEU JPN ARG ZAF NGA IDN CHE AUT PAK POL NLD SWE NOR KOR EGY COL PER CHL VEN KAZ UKR MYS ETH MAR SAU CUB IRN TUR RUS BEL GRC DZA'.split()
+DISS={'ITA':'region','ESP':'region','FRA':'region','GBR':'geonunit'}
+DAILY=set('USA CAN AUS IND CHN BRA MEX DEU JPN ARG ZAF ITA ESP FRA GBR RUS NGA IDN CHE AUT POL NLD SWE NOR TUR'.split())
+TYPEFIX={'GBR':'country','ITA':'region','ESP':'autonomous community','FRA':'region'}
+groups=defaultdict(list)
+for f in NE1['features']:
+    p=f['properties'];a3=p['adm0_a3']
+    if a3 in KEEP: key=(a3,p['name_en'] or p['name'])
+    elif a3 in DISS:
+        r=p[DISS[a3]]
+        if not r: continue
+        key=(a3,r)
+    else: continue
+    groups[key].append(f)
+FIXN={('FRA','Guyane française'):'French Guiana',('FRA','Provence-Alpes-Côte-d\'Azur'):"Provence-Alpes-Côte d'Azur",('ITA','Lombardia'):'Lombardy',('ITA','Piemonte'):'Piedmont',('ITA','Toscana'):'Tuscany',('ITA','Sicilia'):'Sicily',('ITA','Sardegna'):'Sardinia',('ITA','Puglia'):'Apulia',('ITA','Trentino-Alto Adige'):'Trentino-South Tyrol',("ITA","Valle d'Aosta"):'Aosta Valley',('ESP','Cataluña'):'Catalonia',('ESP','Andalucía'):'Andalusia',('ESP','País Vasco'):'Basque Country',('ESP','Islas Baleares'):'Balearic Islands',('ESP','Canary Is.'):'Canary Islands',('ESP','Castilla y León'):'Castile and León',('ESP','Castilla-La Mancha'):'Castilla–La Mancha',('ESP','Foral de Navarra'):'Navarre',('ESP','Comunidad Valenciana'):'Valencia',('ESP','Comunidad de Madrid'):'Madrid',('ESP','Región de Murcia'):'Murcia',('ESP','Principado de Asturias'):'Asturias',('ESP','Galicia'):'Galicia'}
+regs=[]
+for (a3,nm),fs in groups.items():
+    g=unary_union([shape(f['geometry']).buffer(0) for f in fs])
+    p0=fs[0]['properties']; cc=p0['iso_a2'] if p0['iso_a2']!='-99' else None
+    cc={'FRA':'FR','NOR':'NO'}.get(a3,cc)
+    if cc not in C: continue
+    area=abs(geod.geometry_area_perimeter(g)[0])/1e6
+    if area<200 and a3 not in ('USA',): continue
+    name=FIXN.get((a3,nm),nm)
+    typ=TYPEFIX.get(a3) or (p0['type_en'] or 'region').split('|')[0].lower()
+    if a3 in ('USA',) and name=='District of Columbia': typ='federal district'
+    rp_=g.representative_point()
+    lx,ly=(p0['longitude'],p0['latitude']) if len(fs)==1 and p0['longitude'] else (rp_.x,rp_.y)
+    regs.append(dict(id=len(regs),a3=a3,cc=cc,n=name,g=g,type=typ,area=area,lat=ly,lon=lx,d=1 if a3 in DAILY else 0))
+print(len(regs),'regions',sum(r['d'] for r in regs),'daily')
+# neighbours
+tree=STRtree([r['g'] for r in regs])
+for r in regs:
+    r['nb']=[regs[i]['n'] for i in tree.query(r['g'].buffer(0.02)) if i!=r['id'] and regs[i]['g'].distance(r['g'])<0.02]
+# biggest city via point in polygon
+ptree=tree
+big=defaultdict(lambda:None)
+for x in ALLC:
+    if x['population']<20000: continue
+    pt=Point(x['longitude'],x['latitude'])
+    for i in tree.query(pt):
+        if regs[i]['g'].contains(pt):
+            b=big[i]
+            if b is None or x['population']>b['population']: big[i]=x
+            break
+ANS=[];P={}
+for r in regs:
+    c=r['cc'];cl=[]
+    cl.append(f"{'An' if r['type'][0] in 'aeiou' else 'A'} {r['type']} in {CONT[c]} covering about {float('%.2g'%r['area']):,.0f} km²"+(f", about {r['area']/UKA:.1f} times the size of the UK." if r['area']>UKA*1.4 else ", about the size of the UK." if r['area']>UKA*0.85 else f", about {r['area']/UKA*100:.0f}% of the size of the UK." if r['area']>UKA*0.01 else "."))
+    cl.append(weather(r['lat'],r['lon']) or f"It's in {SUB[c]}.")
+    b=big[r['id']]
+    cl.append(f"Its biggest city is home to about {rp(b['population'])} people." if b else (money(c) or ""))
+    cl.append(quirk_text(c,'country') or (money(c) or ""))
+    nb=r['nb']
+    cl.append(f"It's in {ctry_in(c)}"+(f", and it borders {len(nb)} other region{'s' if len(nb)!=1 else ''}." if nb else ", and it has no land border with any other region."))
+    six=(f"Its biggest city is {b['name']}" if b else "It")+(", and it " if b else " ")+letters(r['n'])+"."
+    cl.append(six)
+    P[r['id']]=geo.path(r['g'],0.06)
+    ANS.append(dict(n=r['n'],lat=round(r['lat'],3),lon=round(r['lon'],3),c=c,d=r['d'],id=r['id'],area=f"{r['type'].capitalize()} of {ctry_in(c)}" if False else f"{ctry_lab(c)}",clues=cl,m=C[c]['m'],cn=ctry_lab(c),pop=0,kind=r['type']))
+G=[[r['n'],round(r['lat'],2),round(r['lon'],2),r['cc'],r['id']] for r in regs]
+json.dump(dict(answers=ANS,guess=G,p=P,cn={c:ctry_lab(c) for c in C}),open(OUT+'w_region.json','w'),ensure_ascii=False,separators=(',',':'))
+import os;print('w_region',os.path.getsize(OUT+'w_region.json')/1e6)
+import random;random.seed(1)
+for a in random.sample(ANS,4): print(a['n'],a['area'],a['clues'])

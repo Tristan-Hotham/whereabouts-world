@@ -1,0 +1,29 @@
+import json,math
+from shapely.geometry import shape,mapping
+from shapely.ops import transform
+A1,A2,A3,A4=1.340264,-0.081106,0.000893,0.003796
+M=math.sqrt(3)/2
+def ee(lon,lat):
+    p=math.asin(M*math.sin(math.radians(lat))); p2=p*p; p6=p2**3
+    x=math.radians(lon)*math.cos(p)/(M*(A1+3*A2*p2+p6*(7*A3+9*A4*p2)))
+    y=p*(A1+A2*p2+p6*(A3+A4*p2))
+    return x,y
+XMAX=ee(180,0)[0]; YMAX=ee(0,90)[1]
+W=1000; S=W/(2*XMAX); H=round(2*YMAX*S)
+def xy(lon,lat):
+    x,y=ee(lon,lat); return round((x+XMAX)*S,1),round((YMAX-y)*S,1)
+def path(geom,tol=0.12):
+    g=geom.simplify(tol,preserve_topology=True)
+    polys=list(g.geoms) if hasattr(g,'geoms') else [g]
+    out=[]
+    for p in polys:
+        if p.is_empty: continue
+        for ring in [p.exterior]+list(p.interiors):
+            pts=[xy(*c) for c in ring.coords]
+            if len(pts)<3: continue
+            # drop rings too small to see
+            xs=[a for a,b in pts]; ys=[b for a,b in pts]
+            if max(xs)-min(xs)<0.6 and max(ys)-min(ys)<0.6 and ring is not p.exterior: continue
+            s='M'+'L'.join(f'{a:g},{b:g}' for a,b in pts[:-1])+'Z'
+            out.append(s)
+    return ''.join(out)

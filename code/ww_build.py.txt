@@ -1,0 +1,211 @@
+# Whereabouts World: builds the answer and guess files for each mode
+import json,math,re,random
+from collections import defaultdict
+import numpy as np
+from shapely.geometry import shape,Point
+from shapely.ops import unary_union
+from shapely import STRtree
+import geonamescache
+exec(open('hol_world.py').read().split("\nimport geo\nMAP=")[0])   # countries C, measures M, S
+import geo
+OUT='site/'
+NAMEOF={c:C[c]['name'] for c in C}
+CONT={c:C[c]['cont'] for c in C}
+SUB={c:C[c]['sub'] for c in C}
+UKA=243610
+# ---------- climate ----------
+T={}
+for l in open('raw/t2m.csv'):
+    a,b,jan,jul,ann=map(float,l.split(',')); T[(round(a*2)/2,round(b/0.625)*0.625)]=(jan,jul,ann)
+def clim(lat,lon):
+    for r in range(0,4):
+        best=None
+        for i in range(-r,r+1):
+            for j in range(-r,r+1):
+                k=(round(lat*2)/2+i*0.5,round(lon/0.625)*0.625+j*0.625)
+                if k in T: return T[k]
+    return None
+# ---------- helpers ----------
+def km(a,b,c,d):
+    R=6371;p1,p2=math.radians(a),math.radians(c);dp=p2-p1;dl=math.radians(d-b)
+    h=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2;return 2*R*math.asin(math.sqrt(h))
+DIRS=['north','north-east','east','south-east','south','south-west','west','north-west']
+def bearing(a,b,c,d):
+    y=math.sin(math.radians(d-b))*math.cos(math.radians(c));x=math.cos(math.radians(a))*math.sin(math.radians(c))-math.sin(math.radians(a))*math.cos(math.radians(c))*math.cos(math.radians(d-b))
+    return (math.degrees(math.atan2(y,x))+360)%360
+def letters(nm):
+    L=len(re.sub(r'[^A-Za-zÀ-ÿ]','',nm))
+    return f"starts with {nm[0]} and has {L} letters"+(" (not counting spaces and punctuation)" if re.search(r"[\s\-'’.]",nm) else "")
+def ordn(n): return str(n)+('th' if 10<=n%100<=20 else {1:'st',2:'nd',3:'rd'}.get(n%10,'th'))
+def rp(p):
+    if p>=1e6: return f"{float('%.2g'%(p/1e6)):g} million"
+    return f"{int(float('%.2g'%p)):,}"
+def fmtv(m,x):
+    f=m['fmt']
+    if f=='usd': return '${:,.0f}'.format(x)
+    if f=='pct': return '%.1f%%'%x
+    if f=='int': return '{:,.0f}'.format(x)
+    if f=='2': return '%.2f'%x
+    return '%.1f'%x
+BYID={m['id']:m for m in M}
+FUNIDS=[m['id'] for m in M if m['group']=='Just for fun']+['beer','tea','eggs','fish','islands','bananas','coffee','cocoa','height','languages','whs','meanelev']
+SERIDS=[m['id'] for m in M if m['id'] not in FUNIDS and m['id'] not in ('pop','area','density','gdppc','life')]
+RANK={}
+for m in M:
+    ks=sorted(m['v'],key=lambda c:-m['v'][c]); RANK[m['id']]={c:i+1 for i,c in enumerate(ks)}
+def quirk(c,seed=0):
+    def find(ids,lim,both):
+        best=None
+        for k in ids:
+            m=BYID[k]
+            if c not in m['v'] or len(m['v'])<25: continue
+            n=len(m['v']); r=RANK[k][c]
+            cands=[(r/n,'hi',r)]+([((n-r+1)/n,'lo',n-r+1)] if both else [])
+            for f,s,rr in cands:
+                if rr<=max(1,n*lim) and (best is None or f<best[0]): best=(f,k,rr,n,m['v'][c],s)
+        return best
+    return find(FUNIDS,.05,False) or find(SERIDS,.03,True) or find(FUNIDS,.1,False) or find(SERIDS,.06,True) or find(FUNIDS,.2,False) or find(SERIDS,.12,True)
+def lab(m):
+    l=m['label']; return l if l.split()[0] in ('IKEA','UNESCO',"McDonald's",'Olympic','World','Nobel','Eurovision','Miss','GDP') else l[0].lower()+l[1:]
+def quirk_text(c,who='it'):
+    q=quirk(c)
+    if not q: return None
+    _,k,r,n,v,side=q;m=BYID[k];val=fmtv(m,v)+('' if m['fmt'] in ('pct','usd') else ' '+m['unit'])
+    pre='Fun fact: ' + ('it' if who=='it' else 'its country')
+    if side=='hi': return f"{pre} ranks {ordn(r)} of {n} countries for {lab(m)} ({val})."
+    return f"{pre} ranks {'bottom' if r==1 else ordn(r)+' from bottom'} of {n} countries for {lab(m)} ({val})."
+def money(c,who='its country'):
+    g=BYID['gdppc']['v'].get(c); l=BYID['life']['v'].get(c)
+    bits=[]
+    if g: bits.append(f"GDP per person is about ${float('%.2g'%g):,.0f}")
+    if l: bits.append(f"people live to {l:.0f} on average")
+    if not bits: return None
+    s=" and ".join(bits); return (f"In {who}, " if who else "")+s+"."
+def deg(x):
+    v=round(x)
+    return '0' if v==0 else str(v)
+def weather(lat,lon,where='It'):
+    t=clim(lat,lon)
+    if not t: return None
+    jan,jul,ann=t
+    hot,cold=(jul,jan) if lat>=0 else (jan,jul)
+    return f"{where} averages {deg(ann)} °C over the year: about {deg(hot)} °C in {'July' if lat>=0 else 'January'} and {deg(cold)} °C in {'January' if lat>=0 else 'July'}."
+THE={'US','GB','NL','PH','AE','CD','CG','CF','DO','BS','MV','KM','MH','SB','GM'}
+def ctry_lab(c): return NAMEOF.get(c,c)
+def ctry_in(c): return ('the ' if c in THE else '')+ctry_lab(c)
+# ---------- cities ----------
+gc=geonamescache.GeonamesCache(min_city_population=500)
+ALLC=list(gc.get_cities().values())
+for x in ALLC: x['alt']=len(x['alternatenames'])
+# admin1 names from Natural Earth
+NE1=json.load(open('raw/ne_10m_admin_1_states_provinces.geojson'))
+A1={}
+for f in NE1['features']:
+    p=f['properties']
+    if p.get('gn_a1_code'): A1[p['gn_a1_code']]=p['name_en'] or p['name']
+def a1(x): return A1.get(x['countrycode']+'.'+str(x['admin1code']))
+def clabel(x):
+    a=a1(x); c=ctry_lab(x['countrycode'])
+    return (a+', '+c) if a and a!=x['name'] else c
+BIG=[x for x in ALLC if x['population']>=100000]
+BA=np.array([[x['latitude'],x['longitude']] for x in BIG])
+def nearest_big(x,minpop):
+    la,lo=x['latitude'],x['longitude']
+    d=np.radians(BA-[la,lo]); a=np.sin(d[:,0]/2)**2+np.cos(np.radians(la))*np.cos(np.radians(BA[:,0]))*np.sin(d[:,1]/2)**2
+    dist=2*6371*np.arcsin(np.sqrt(a))
+    order=np.argsort(dist)
+    for i in order[:400]:
+        y=BIG[i]
+        if y['geonameid']!=x['geonameid'] and y['population']>=minpop and dist[i]>2: return y,dist[i]
+    return None,None
+def ok_country(c): return c in C
+# ---------- capitals ----------
+CAP={}
+for c,d in C.items():
+    cn=d['capital']
+    if not cn: continue
+    cands=[x for x in ALLC if x['countrycode']==c and (x['name']==cn or cn in x['alternatenames'])]
+    if cands: CAP[c]=max(cands,key=lambda x:x['population'])
+print('capitals found',len(CAP),'of',len(C),'sov missing',[C[c]['name'] for c in S if c not in CAP])
+def meaning_line(c):
+    m=C[c]['m']
+    return m
+def place_answer(x,kind,daily):
+    c=x['countrycode']; la,lo=x['latitude'],x['longitude']; nm=x['name']
+    cl=[f"A {'capital city' if kind=='capital' else kind} of about {rp(x['population'])} people in {CONT[c]}."]
+    cl.append(weather(la,lo) or f"It's in {SUB[c]}.")
+    cl.append(money(c) or f"It's in {SUB[c]}.")
+    cl.append(quirk_text(c,'country') or f"Its country covers about {float('%.2g'%BYID['area']['v'].get(c,0)):,.0f} km².")
+    a=a1(x)
+    cl.append(f"It's in {ctry_in(c)}"+(f", in {a}." if a and a!=nm else "."))
+    if kind=='capital':
+        cl.append(f"It's the capital of {ctry_in(c)}, and it {letters(nm)}.")
+    else:
+        y,dk=nearest_big(x,max(100000,x['population']*2))
+        if y: cl.append(f"It's about {dk:,.0f} km {DIRS[round(bearing(y['latitude'],y['longitude'],la,lo)/45)%8]} of {y['name']}, and it {letters(nm)}.")
+        else: cl.append(f"It {letters(nm)}.")
+    if kind=='capital': cl[4]=f"It's in {SUB[c]}, and its country's name starts with {ctry_lab(c)[0]}."
+    return dict(n=nm,lat=round(la,4),lon=round(lo,4),c=c,d=daily,pop=int(x['population']),area=clabel(x),clues=cl,m=C[c]['m'],cn=ctry_lab(c))
+A1L=[];A1I={}
+def gl(x):
+    a=a1(x); i=-1
+    if a and a!=x['name']:
+        if a not in A1I: A1I[a]=len(A1L); A1L.append(a)
+        i=A1I[a]
+    return [x['name'],round(x['latitude'],2),round(x['longitude'],2),x['countrycode'],i]
+def cap_per_country(xs,cap,key=lambda x:-x['alt']):
+    by=defaultdict(list)
+    for x in xs: by[x['countrycode']].append(x)
+    out=[]
+    for c,l in by.items(): out+=sorted(l,key=key)[:cap]
+    return out
+def write(name,obj):
+    if 'guess' in obj and obj['guess'] and len(obj['guess'][0])==5 and isinstance(obj['guess'][0][4],int):
+        obj['a1']=A1L
+    obj['cn']={c:ctry_lab(c) for c in C}
+    json.dump(obj,open(OUT+name,'w'),ensure_ascii=False,separators=(',',':'))
+    import os;print(name,round(os.path.getsize(OUT+name)/1e6,2),'MB')
+# ---------- country mode ----------
+ANS=[]
+for c in S:
+    d=C[c]; p=BYID['pop']['v'].get(c,0); ar=BYID['area']['v'].get(c,0)
+    ratio=ar/UKA
+    size=(f"about {ratio:.1f} times the size of the UK" if ratio>=1.5 else "about the size of the UK" if ratio>=0.75 else f"about {ar/UKA*100:.0f}% of the size of the UK" if ratio>=0.01 else f"tiny: about {ar:,.0f} km²")
+    cl=[f"A country of about {rp(p)} people, {size}."]
+    cap=CAP.get(c)
+    w=weather(cap['latitude'],cap['longitude'],'Its capital') if cap else weather(d['ly'],d['lx'])
+    rain=BYID['rain']['v'].get(c)
+    cl.append((w or '')+(f" The country gets about {rain:,.0f} mm of rain a year." if rain else ''))
+    cl.append(money(c,None) or "")
+    cl[2]=cl[2][0].upper()+cl[2][1:] if cl[2] else f"It covers about {ar:,.0f} km²."
+    cl.append(quirk_text(c) or f"It covers about {ar:,.0f} km².")
+    nb=[x for x in d['nb'] if x in C]
+    cl.append(f"It's in {SUB[c]}"+(f" and has {len(nb)} land neighbour{'s' if len(nb)!=1 else ''}." if nb else ", with no land borders."))
+    cl.append((f"Its capital starts with {cap['name'][0]}, and the country " if cap else "It ")+letters(d['name'])+".")
+    ANS.append(dict(n=d['name'],lat=round(d['ly'],3),lon=round(d['lx'],3),c=c,d=1,pop=int(p),area=SUB[c],clues=cl,m=d['m'],cn=d['name']))
+G=[[C[c]['name'],round(C[c]['ly'],3),round(C[c]['lx'],3),c,SUB[c]] for c in C]
+write('w_country.json',dict(answers=ANS,guess=G))
+# ---------- capital mode ----------
+ANS=[place_answer(CAP[c],'capital',1) for c in S if c in CAP]
+G=[gl(CAP[c]) for c in CAP]
+write('w_capital.json',dict(answers=ANS,guess=G))
+# ---------- city mode ----------
+cities=[x for x in ALLC if x['population']>=500000 and ok_country(x['countrycode'])]
+ANS=[place_answer(x,'city',1 if x['population']>=1e6 else 0) for x in cities]
+G=[gl(x) for x in ALLC if x['population']>=100000 and ok_country(x['countrycode'])]
+write('w_city.json',dict(answers=ANS,guess=G))
+# ---------- town mode ----------
+towns=[x for x in ALLC if 15000<=x['population']<100000 and x['alt']>=15 and ok_country(x['countrycode'])]
+daily=set(id(x) for x in cap_per_country([x for x in towns if x['alt']>=25],20))
+towns=cap_per_country(towns,40)
+ANS=[place_answer(x,'town',1 if id(x) in daily else 0) for x in towns]
+G=[gl(x) for x in ALLC if x['population']>=15000 and ok_country(x['countrycode'])]
+write('w_town.json',dict(answers=ANS,guess=G))
+# ---------- village mode ----------
+vill=[x for x in ALLC if 500<=x['population']<5000 and x['alt']>=12 and ok_country(x['countrycode'])]
+daily=set(id(x) for x in cap_per_country([x for x in vill if x['alt']>=18],15))
+vill=cap_per_country(vill,40)
+ANS=[place_answer(x,'village',1 if id(x) in daily else 0) for x in vill]
+G=[gl(x) for x in ALLC if x['population']>=15000 and ok_country(x['countrycode'])]+[gl(x) for x in vill]
+write('w_village.json',dict(answers=ANS,guess=G))
+print('town daily',sum(1 for a in json.load(open(OUT+'w_town.json'))['answers'] if a['d']),'village daily',sum(1 for a in json.load(open(OUT+'w_village.json'))['answers'] if a['d']))

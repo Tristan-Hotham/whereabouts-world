@@ -1,0 +1,34 @@
+import json,csv,math,re
+from shapely.geometry import shape
+import geonamescache
+from names import iso,key,SOV
+import geo
+gc=geonamescache.GeonamesCache()
+GN=gc.get_countries()
+CN={}
+for c in csv.DictReader(open('raw/country-names/data/countries.csv')):
+    if c['iso2'] not in CN or c['sovereign']=='1' and CN[c['iso2']]['sovereign']!='1': CN[c['iso2']]=c
+SHORT={'CN':'China','FM':'Micronesia','BS':'Bahamas','GM':'Gambia','CD':'DR Congo','CG':'Congo','CZ':'Czechia','TL':'Timor-Leste','CI':"Côte d'Ivoire",'MK':'North Macedonia','VA':'Vatican City'}
+ET={r['wikidata']:r for r in csv.DictReader(open('raw/country-names/data/etymologies.csv'))}
+FB=json.load(open('factbook.json'))
+NE=json.load(open('raw/ne_50m_admin_0_countries.geojson'))
+C={}
+for f in NE['features']:
+    p=f['properties']; c=p['ISO_A2'] if p['ISO_A2']!='-99' else p['ISO_A2_EH']
+    if p.get('ADM0_A3')=='TWN': c='TW'
+    if c in ('-99',None): continue
+    g=shape(f['geometry']).buffer(0)
+    if c in C: C[c]['geom']=C[c]['geom'].union(g); continue
+    C[c]=dict(iso=c,ne=p['NAME'],sub=p['SUBREGION'],cont=p['CONTINENT'],lx=p['LABEL_X'],ly=p['LABEL_Y'],geom=g,sov=c in SOV)
+missing=[s for s in SOV if s not in C]
+print('sov not in NE',missing)
+# names: prefer country-names short name
+for c,d in C.items():
+    d['name']=SHORT.get(c) or (CN[c]['name'] if c in CN else d['ne'])
+    gn=GN.get(c,{})
+    d['capital']=gn.get('capital'); d['nb']=[x for x in (gn.get('neighbours') or '').split(',') if x]
+    d['fips']=gn.get('fips'); d['fb']=FB.get((gn.get('fips') or '').upper(),{})
+    d['m']=None
+    if c in CN and CN[c]['wikidata'] in ET: d['m']=ET[CN[c]['wikidata']]['english_name_etymology']
+print(len(C),'countries/territories;',sum(d['sov'] for d in C.values()),'sovereign;','etym',sum(1 for d in C.values() if d['m'] and d['sov']),'factbook',sum(1 for d in C.values() if d['fb'] and d['sov']))
+print([d['name'] for d in C.values() if d['sov'] and not d['fb']])

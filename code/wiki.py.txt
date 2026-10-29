@@ -1,0 +1,83 @@
+import json,io,re,warnings,pandas as pd
+from names import iso,key
+warnings.filterwarnings('ignore')
+T=json.load(open('raw/wiki_tables.json'))
+def df(page,i): 
+    d=pd.read_html(io.StringIO(T[page][i]))[0]
+    d.columns=[' / '.join(dict.fromkeys(map(str,c))) if isinstance(c,tuple) else str(c) for c in d.columns]
+    return d
+def fnum(x):
+    if x is None or (isinstance(x,float) and x!=x): return None
+    s=str(x).replace(',','').replace('\xa0',' ').replace('−','-')
+    m=re.search(r'-?\d+(?:\.\d+)?',s); return float(m.group()) if m else None
+UNM={}
+def series(page,i,namecol,valcol,f=fnum,agg='first'):
+    d=df(page,i); out={}
+    nc=[c for c in d.columns if namecol in c][0]; vc=[c for c in d.columns if valcol in c][0]
+    for _,r in d.iterrows():
+        n=str(r[nc]); c=iso(n); v=f(r[vc])
+        if c=='?': UNM.setdefault(page,[]).append(n); continue
+        if c is None or v is None: continue
+        if agg=='sum': out[c]=out.get(c,0)+v
+        elif agg=='max': out[c]=max(out.get(c,v),v)
+        elif c not in out: out[c]=v
+    return out
+W={}
+d=df('All-time Olympic Games medal table',0)
+cols=list(d.columns)
+# combined total is last column group; find columns
+tot=[c for c in cols if 'Combined' in c or 'combined' in c.lower()]
+W['_olycols']=cols
+o={};g={}
+for _,r in d.iterrows():
+    n=re.sub(r'\[.*','',str(r[cols[0]])).strip(); c=iso(n)
+    if c in (None,'?'): 
+        if c=='?': UNM.setdefault('oly',[]).append(n)
+        continue
+    o[c]=o.get(c,0)+fnum(r[cols[-1]]); g[c]=g.get(c,0)+fnum(r[cols[-4]])
+W['olympic']=o; W['golds']=g
+W['nobel']=series('List of Nobel laureates by country',0,'Country','Number')
+W['mcd']=series("List of countries with McDonald's restaurants",0,'Country','No. of operating')
+W['billionaires']=series('List of countries by number of billionaires',0,'Country','2026')
+W['worldcup']=series('National team appearances in the FIFA World Cup',0,'Team','Appearances',agg='max')
+W['beer']=series('List of countries by beer consumption per capita',0,'Country','per capita')
+W['tea']=series('List of countries by tea consumption per capita',0,'Country','Tea consumption')
+W['vehicles']=series('List of countries and territories by motor vehicles per capita',0,'Region','per 1,000')
+W['timezones']=series('List of time zones by country',0,'Country','No. of time zones')
+W['height']=series('Human height by country',0,'Country','Average male')
+W['heightf']=series('Human height by country',0,'Country','Average female')
+W['milk']=series('List of countries by milk consumption per capita',0,'Country','2013')
+W['meat']=series('List of countries by meat consumption',0,'Country','2020')
+W['temp']=series('List of countries by average yearly temperature',0,'Country','Temperature')
+W['islands']=series('List of countries by number of islands',0,'Country','No. of islands')
+W['languages']=series('List of countries by number of languages',0,'Country','Total')
+W['rain']=series('List of countries by average annual precipitation',0,'Country','mm')
+d=df('List of Eurovision Song Contest winners',0); ev={}
+for n in d['Country']: c=iso(n); 
+for n in d['Country']:
+    c=iso(n)
+    if c not in (None,'?'): ev[c]=ev.get(c,0)+1
+W['eurovision']=ev
+W['f1']=series("List of Formula One World Drivers' Champions",3,'Country','Titles')
+W['missuniverse']=series('List of Miss Universe titleholders',1,'Country','Titles')
+W['military_pp']=series('List of countries by number of military and paramilitary personnel',0,'Country','Per 1,000 capita (active)')
+W['cocoa']=series('List of countries by cocoa production',0,'Country','Tonnes')
+W['coffeeprod']=series('List of countries by coffee production',0,'Country','Production')
+W['wineprod']=series('List of countries by wine production',0,'Country','Production')
+W['potato']=series('List of countries by potato production',0,'Country','2022')
+W['borders']=series('List of countries and territories by number of land borders',0,'Country or territory','borders'.split()[0]) if False else None
+d=df('List of countries and territories by number of land borders',0); W['_bcols']=list(d.columns)
+# IKEA stores
+ik={}
+for h in T['IKEA'][1:5]:
+    d=pd.read_html(io.StringIO(h))[0]
+    for cell in d.astype(str).values.flatten():
+        for n,s in re.findall(r'([A-Z][A-Za-z .\'-]+?) (?:\(.*?\) )?Current stores: (\d+)',cell): 
+            c=iso(n.strip())
+            if c not in (None,'?'): ik[c]=ik.get(c,0)+int(s)
+            elif c=='?': UNM.setdefault('ikea',[]).append(n)
+W['ikea']=ik
+del W['borders']
+json.dump(W,open('wiki.json','w'))
+for k,v in W.items(): print(k, len(v) if isinstance(v,dict) else v)
+for k,v in UNM.items(): print('UNMATCHED',k,sorted(set(v))[:40])

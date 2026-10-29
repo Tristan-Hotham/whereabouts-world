@@ -1,0 +1,87 @@
+import json,glob,re,os
+FB='raw/factbook/'
+def num(s):
+    if s is None: return None
+    s=re.sub(r'\(.*?\)','',str(s)).replace(',','')
+    m=re.search(r'(-?\$?\d+(?:\.\d+)?)\s*(trillion|billion|million)?',s)
+    if not m: return None
+    v=float(m.group(1).replace('$',''))
+    return v*{'trillion':1e12,'billion':1e9,'million':1e6,None:1}[m.group(2)]
+def get(d,*path):
+    for p in path:
+        if not isinstance(d,dict) or p not in d: return None
+        d=d[p]
+    return d.get('text') if isinstance(d,dict) else d
+def latest(d,*path):
+    x=get(d,*path[:-1]) if False else None
+    node=d
+    for p in path:
+        if not isinstance(node,dict) or p not in node: return None
+        node=node[p]
+    if isinstance(node,dict) and 'text' not in node:
+        ks=sorted(node.keys(),reverse=True)
+        for k in ks:
+            if isinstance(node[k],dict) and 'text' in node[k]: return node[k]['text']
+        return None
+    return node.get('text') if isinstance(node,dict) else None
+out={}
+for f in glob.glob(FB+'*/*.json'):
+    gec=os.path.basename(f)[:-5].upper()
+    d=json.load(open(f))
+    r={}
+    r['name']=get(d,'Government','Country name','conventional short form')
+    r['pop']=num(get(d,'People and Society','Population','total'))
+    r['area']=num(get(d,'Geography','Area','total '))or num(get(d,'Geography','Area','total'))
+    r['coast']=num(get(d,'Geography','Coastline'))
+    hp=get(d,'Geography','Elevation','highest point'); r['high']=num(re.sub(r'^[^\d-]*','',hp.split(' m')[0].split()[-1]) if hp else None) if hp else None
+    if hp:
+        m=re.findall(r'(-?[\d,]+)\s*m\b',hp); r['high']=float(m[-1].replace(',','')) if m else None; r['highname']=re.sub(r'\s*-?[\d,]+\s*m.*$','',hp).strip()
+    lp=get(d,'Geography','Elevation','lowest point')
+    if lp:
+        m=re.findall(r'(-?[\d,]+)\s*m\b',lp); r['low']=float(m[-1].replace(',','')) if m else None
+    r['meanelev']=num(get(d,'Geography','Elevation','mean elevation'))
+    r['forest']=num(get(d,'Geography','Land use','forest'))
+    r['agri']=num(get(d,'Geography','Land use','agricultural land'))
+    r['medage']=num(get(d,'People and Society','Median age','total'))
+    r['life']=num(get(d,'People and Society','Life expectancy at birth','total population'))
+    r['fert']=num(get(d,'People and Society','Total fertility rate'))
+    r['firstbirth']=num(get(d,'People and Society',"Mother's mean age at first birth"))
+    r['urban']=num(get(d,'People and Society','Urbanization','urban population'))
+    r['obesity']=num(get(d,'People and Society','Obesity - adult prevalence rate'))
+    r['alcohol']=num(get(d,'People and Society','Alcohol consumption per capita','total'))
+    r['wine']=num(get(d,'People and Society','Alcohol consumption per capita','wine'))
+    r['spirits']=num(get(d,'People and Society','Alcohol consumption per capita','spirits'))
+    r['beeralc']=num(get(d,'People and Society','Alcohol consumption per capita','beer'))
+    r['tobacco']=num(get(d,'People and Society','Tobacco use','total'))
+    r['doctors']=num(get(d,'People and Society','Physician density'))
+    r['beds']=num(get(d,'People and Society','Hospital bed density'))
+    r['school']=num(get(d,'People and Society','School life expectancy (primary to tertiary education)','total'))
+    r['migr']=num(get(d,'People and Society','Net migration rate'))
+    r['gdppc']=num(latest(d,'Economy','Real GDP per capita'))
+    r['unemp']=num(latest(d,'Economy','Unemployment rate'))
+    r['foodspend']=num(get(d,'Economy','Average household expenditures','on food'))
+    r['booze_spend']=num(get(d,'Economy','Average household expenditures','on alcohol and tobacco'))
+    r['debt']=num(latest(d,'Economy','Public debt'))
+    r['internet']=num(get(d,'Communications','Internet users','percent of population'))
+    r['mobile']=num(get(d,'Communications','Telephones - mobile cellular','subscriptions per 100 inhabitants'))
+    r['airports']=num(get(d,'Transportation','Airports'))
+    r['heliports']=num(get(d,'Transportation','Heliports'))
+    r['rail']=num(get(d,'Transportation','Railways','total'))
+    r['ships']=num(get(d,'Transportation','Merchant marine','total'))
+    r['ports']=num(get(d,'Transportation','Ports','total ports'))
+    r['military']=num(latest(d,'Military and Security','Military expenditures'))
+    r['reactors']=num(get(d,'Energy','Nuclear energy','Number of operational nuclear reactors'))
+    r['energypc']=num(latest(d,'Energy','Energy consumption per capita'))
+    r['co2']=num(get(d,'Environment','Carbon dioxide emissions','total emissions'))
+    r['geoparks']=num(get(d,'Environment','Geoparks','total global geoparks and regional networks'))
+    r['wind']=num(get(d,'Energy','Electricity generation sources','wind'))
+    r['solar']=num(get(d,'Energy','Electricity generation sources','solar'))
+    r['hydro']=num(get(d,'Energy','Electricity generation sources','hydroelectricity'))
+    r['recycle']=num(get(d,'Environment','Waste and recycling','percent of municipal solid waste recycled'))
+    r['sexratio65']=num(get(d,'People and Society','Sex ratio','65 years and over'))
+    r['climate']=get(d,'Geography','Climate')
+    out[gec]=r
+json.dump(out,open('factbook.json','w'),indent=0)
+uk=out['UK'];print({k:v for k,v in uk.items() if k!='climate'})
+import collections
+print(collections.Counter(k for r in out.values() for k,v in r.items() if v is not None).most_common())

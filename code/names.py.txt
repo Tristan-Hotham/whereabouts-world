@@ -1,0 +1,23 @@
+import json,csv,re,unicodedata
+import geonamescache
+gc=geonamescache.GeonamesCache()
+GN=gc.get_countries()
+NE=json.load(open('raw/ne_50m_admin_0_countries.geojson'))
+CN=list(csv.DictReader(open('raw/country-names/data/countries.csv')))
+def key(s):
+    s=unicodedata.normalize('NFKD',str(s)).encode('ascii','ignore').decode().lower()
+    s=re.sub(r'\[.*?\]|\(.*?\)','',s); s=s.replace('&','and')
+    s=re.sub(r'^the ','',s.strip()); s=re.sub(r'[^a-z ]','',s); return re.sub(r'\s+',' ',s).strip()
+AL={}
+def add(n,iso):
+    if n and iso and len(iso)==2: AL.setdefault(key(n),iso)
+for c in CN: add(c['name'],c['iso2'])
+for iso,c in GN.items(): add(c['name'],iso)
+for f in NE['features']:
+    p=f['properties']; iso=p['ISO_A2'] if p['ISO_A2']!='-99' else p['ISO_A2_EH']
+    for k in ('NAME','NAME_LONG','ADMIN','FORMAL_EN','NAME_SORT','GEOUNIT','BRK_NAME','NAME_CIAWF'): add(p.get(k),iso)
+for n,i in {'Czech Republic':'CZ','Czechia':'CZ','Ivory Coast':'CI',"Cote d'Ivoire":'CI','Republic of the Congo':'CG','Congo':'CG','Congo Republic':'CG','DR Congo':'CD','Democratic Republic of the Congo':'CD','Congo DR':'CD','Congo, Democratic Republic of the':'CD','South Korea':'KR','Korea, South':'KR','Republic of Korea':'KR','Korea':'KR','North Korea':'KP','Korea, North':'KP','Great Britain':'GB','United Kingdom':'GB','UK':'GB','England':'GB','Russia':'RU','Russian Federation':'RU','Turkey':'TR','Turkiye':'TR','Iran':'IR','Syria':'SY','Laos':'LA','Vietnam':'VN','Viet Nam':'VN','Bolivia':'BO','Venezuela':'VE','Tanzania':'TZ','Moldova':'MD','Macedonia':'MK','North Macedonia':'MK','Eswatini':'SZ','Swaziland':'SZ','Burma':'MM','Myanmar':'MM','Cape Verde':'CV','Cabo Verde':'CV','East Timor':'TL','Timor-Leste':'TL','Micronesia':'FM','Federated States of Micronesia':'FM','Vatican City':'VA','Holy See':'VA','Gambia':'GM','The Gambia':'GM','Bahamas':'BS','The Bahamas':'BS','United States':'US','USA':'US','United States of America':'US','UAE':'AE','United Arab Emirates':'AE','Brunei':'BN','Taiwan':'TW','Chinese Taipei':'TW','Hong Kong':'HK','Palestine':'PS','State of Palestine':'PS','Kosovo':'XK','Netherlands':'NL','Holland':'NL','Saint Kitts and Nevis':'KN','Saint Lucia':'LC','Saint Vincent and the Grenadines':'VC','Sao Tome and Principe':'ST','Bosnia':'BA','Bosnia and Herzegovina':'BA','Kyrgyzstan':'KG','Slovakia':'SK','Slovak Republic':'SK','West Germany':'DE','Germany':'DE','Ireland':'IE','Republic of Ireland':'IE','Iceland':'IS','China':'CN',"People's Republic of China":'CN','Mainland China':'CN','Egypt':'EG','Yemen':'YE','Federated States of Micronesia':'FM','Lao PDR':'LA','Kyrgyz Republic':'KG','Gambia, The':'GM','Bahamas, The':'BS','Korea, Rep.':'KR','Iran, Islamic Rep.':'IR','Egypt, Arab Rep.':'EG','Micronesia, Fed. Sts.':'FM','Brunei Darussalam':'BN','Syrian Arab Republic':'SY','Puerto Rico':'PR','Greenland':'GL','Western Sahara':'EH','Northern Cyprus':None,'Scotland':'GB','Wales':'GB','Northern Ireland':'GB','Serbia and Montenegro':None,'Yugoslavia':None,'Soviet Union':None,'Czechoslovakia':None,'East Germany':None,'Unified Team':None,'ROC':'RU','Olympic Athletes from Russia':'RU','Russia/USSR':'RU','Independent Olympic Athletes':None}.items():
+    AL[key(n)]=i
+def iso(n):
+    return AL.get(key(n),'?')
+SOV={c['iso2'] for c in CN if c['sovereign']=='1'}
